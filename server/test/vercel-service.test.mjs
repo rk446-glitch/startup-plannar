@@ -1,10 +1,7 @@
-import { createRequire } from "node:module";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import app from "../src/app.js";
+import { createSession, revokeSession } from "../src/auth/session.js";
 
-const require = createRequire(import.meta.url);
-const indexHandler = require("../../api/index.js");
-const app = require("../../api/[...path].js");
-const { createSession, revokeSession } = require("../src/auth/session");
 const originalVercel = process.env.VERCEL;
 const originalDatabaseUrl = process.env.DATABASE_URL;
 let server;
@@ -28,8 +25,8 @@ afterAll(async () => {
   else process.env.DATABASE_URL = originalDatabaseUrl;
 });
 
-describe("Vercel Express function entry point", () => {
-  it("routes existing API endpoints through the exported Express application", async () => {
+describe("Express API service on Vercel", () => {
+  it("serves the existing API routes and JSON 404 response", async () => {
     const [apiResponse, healthResponse, missingResponse] = await Promise.all([
       fetch(`${baseUrl}/api`),
       fetch(`${baseUrl}/api/health`),
@@ -46,17 +43,7 @@ describe("Vercel Express function entry point", () => {
     expect(await missingResponse.json()).toMatchObject({ error: "Route not found" });
   });
 
-  it("exports the API root through the Vercel function entry point", async () => {
-    expect(indexHandler).toBe(app);
-    const response = await fetch(`${baseUrl}/api`);
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      name: "Startup Cost and Profitability Analysis System",
-    });
-  });
-
-  it("requires persistent PostgreSQL storage when running on Vercel", async () => {
+  it("requires persistent PostgreSQL storage on Vercel", async () => {
     process.env.VERCEL = "1";
     delete process.env.DATABASE_URL;
 

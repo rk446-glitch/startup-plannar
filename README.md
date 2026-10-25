@@ -17,14 +17,14 @@ Calculation endpoints require a valid session and return HTTP 401 otherwise. Bro
 The complete application is deployed from **one Vercel project** rooted at the repository root:
 
 - Vite builds the React frontend from `client/` into `client/dist/`.
-- `api/index.js` and `api/[...path].js` export the same Express application as Vercel Node.js Functions for `/api` and nested `/api/*` routes. They use the existing route handlers and calculation functions; they do not proxy to another server.
+- Vercel builds the existing Express application in `server/` as a serverless service. Top-level rewrites route `/api` and `/api/*` to that service and all other paths to the Vite frontend service. Both services use the existing API handlers and calculation functions; no separate backend host is required.
 - PostgreSQL stores account records and hashed, revocable session tokens. Vercel's function filesystem is not used for persistent data. Create a managed PostgreSQL database (for example, through a Vercel Marketplace PostgreSQL integration) and configure `DATABASE_URL`.
 - Saved business plans remain browser-local in localStorage, namespaced and validated by authenticated user ID. They persist across deployments in that browser but are not stored in PostgreSQL, shared across devices, or recoverable if browser storage is cleared.
 
 ### Connect GitHub and configure Vercel
 
 1. In Vercel, choose **Add New → Project**, import `rk446-glitch/startup-plannar`, and set the **Root Directory** to `.` (the repository root).
-2. Use the repository's `vercel.json` settings: install command `npm ci --prefix server && npm ci --prefix client`, build command `npm run build --prefix client`, and output directory `client/dist`. Use the **Other** framework preset if Vercel does not detect one automatically.
+2. Keep the project root at the repository root (`.`) and use the **Services** configuration in `vercel.json`. It builds the Vite frontend and Express API from their existing directories, with one domain and one Vercel project.
 3. Add a managed PostgreSQL integration/database and add its connection URL to the Vercel project's **Environment Variables** as `DATABASE_URL` for Production (and Preview only if each preview has an intentionally configured database).
 4. Set `DATABASE_SSL=true` only if the provider's connection requires TLS and its connection string does not already configure it. `CLIENT_ORIGIN` is optional for the default same-origin deployment; the API validates browser mutations against the HTTPS request host. If set, use the exact app origin, such as `https://your-project.vercel.app`.
 5. Deploy. The first API request initializes the existing `users` and `sessions` schema idempotently. Check `/api/health`; it reports an unavailable database as HTTP 503 rather than claiming the service is ready.
@@ -59,7 +59,7 @@ The script initializes the schema, imports accounts in a transaction without pri
 
 - **`Production database is not configured` / HTTP 503:** add `DATABASE_URL` to the Vercel environment for the deployment and redeploy.
 - **`Production database is unavailable` / health check HTTP 503:** verify the provider URL, database network access, and whether `DATABASE_SSL=true` is required.
-- **API routes return 404:** confirm the project root is the repository root and that both files in `api/` are included in the deployment.
+- **API routes return 404:** confirm the project root is the repository root and the `server` service plus `/api` rewrites in `vercel.json` are deployed.
 - **Registration/login fails after deployment:** first confirm `/api/health` is ready; then inspect Vercel Function logs for database connectivity errors. Existing local accounts are not present in the new database until migrated.
 - **Browser reports a blocked origin:** use the same deployed origin for the website and API, and remove stale cross-origin API URLs. If a separately hosted frontend is intentionally used, set `CLIENT_ORIGIN` to its exact HTTPS origin.
 - **Build cannot find a package:** keep the repository-root install command from `vercel.json`; it installs the backend and frontend lockfiles without adding a root dependency manifest.
