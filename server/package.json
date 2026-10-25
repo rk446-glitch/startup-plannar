@@ -1,0 +1,20 @@
+{
+  "name": "startup-profitability-server",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Express API for the Startup Cost and Profitability Analysis System",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate:users": "node scripts/migrate-users.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  }
+}

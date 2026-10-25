@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: foundry-startup-planner-api
+    runtime: node
+    plan: starter
+    region: oregon
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: foundry-startup-planner-db
+          property: connectionString
+      - key: CLIENT_ORIGIN
+        sync: false
+
+databases:
+  - name: foundry-startup-planner-db
+    databaseName: foundry
+    user: foundry
+    plan: basic-256mb
+    region: oregon
+    ipAllowList: []
