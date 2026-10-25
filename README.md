@@ -27,7 +27,7 @@ The complete application is deployed from **one Vercel project** rooted at the r
 2. Keep the project root at the repository root (`.`) and use the **Services** configuration in `vercel.json`. It builds the Vite frontend and Express API from their existing directories, with one domain and one Vercel project.
 3. Add a managed PostgreSQL integration/database and add its connection URL to the Vercel project's **Environment Variables** as `DATABASE_URL` for Production (and Preview only if each preview has an intentionally configured database).
 4. Set `DATABASE_SSL=true` only if the provider's connection requires TLS and its connection string does not already configure it. `CLIENT_ORIGIN` is optional for the default same-origin deployment; the API validates browser mutations against the HTTPS request host. If set, use the exact app origin, such as `https://your-project.vercel.app`.
-5. Deploy. The first API request initializes the existing `users` and `sessions` schema idempotently. Check `/api/health`; it reports an unavailable database as HTTP 503 rather than claiming the service is ready.
+5. Deploy (or redeploy after connecting the database). Vercel environment changes apply to new deployments, not deployments already built. The first API request initializes the existing `users` and `sessions` schema idempotently. Check `/api/health`; it reports an unavailable database as HTTP 503 rather than claiming the service is ready.
 
 Vercel supplies `VERCEL=1` at runtime. Do not set a separate backend URL or a `VITE_*` production API URL. Frontend requests use relative `/api/...` paths, so the website and API share the same domain and HttpOnly session cookie. Vercel's `NODE_ENV` production setting enables secure cookies.
 
