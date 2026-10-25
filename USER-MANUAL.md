@@ -91,7 +91,7 @@ Saved plans exist only in this browser's local storage on this device and are se
 
 ## Production deployment
 
-Production uses Vercel for the `client` directory and its same-origin `/api/*` proxy function, Render for the Express API, and Render PostgreSQL for persistent accounts and sessions. See the README's **Production architecture and deployment** section for exact root directories, commands, environment variables, existing-account migration, and manual account authorization steps.
+Production uses one Vercel project for the React frontend and Express API, with managed PostgreSQL for persistent accounts and sessions. Saved plans remain browser-local and user-namespaced. See the README's **Production architecture and deployment** section for the root directory, commands, environment variables, account migration, and setup instructions.
 
 ## API routes
 

@@ -14,7 +14,7 @@ function cookieValue(request, name) {
 }
 
 function setSessionCookie(response, token) {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  const secure = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" ? "; Secure" : "";
   response.setHeader(
     "Set-Cookie",
     `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_DURATION_MS / 1000)}${secure}`,
@@ -22,7 +22,7 @@ function setSessionCookie(response, token) {
 }
 
 function clearSessionCookie(response) {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  const secure = process.env.NODE_ENV === "production" || process.env.VERCEL === "1" ? "; Secure" : "";
   response.setHeader(
     "Set-Cookie",
     `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`,

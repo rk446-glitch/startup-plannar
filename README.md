@@ -14,15 +14,55 @@ Calculation endpoints require a valid session and return HTTP 401 otherwise. Bro
 
 ## Production architecture and deployment
 
-- **Frontend and same-origin API proxy:** Vercel project root `client`, build command `npm run build`, output `dist`. The Node function in `client/api/[...path].js` forwards `/api/*` requests to the backend while keeping the session cookie same-origin with the Vercel app.
-- **Express backend:** Render web service declared in `render.yaml`, root `server`, build `npm ci`, start `npm start`, health check `/api/health`.
-- **Persistent database:** Render PostgreSQL, linked to the backend using its internal connection string. The backend creates its tables idempotently at startup. Render's database resource is a paid `basic-256mb` plan in this blueprint; check current pricing before creating it.
+The complete application is deployed from **one Vercel project** rooted at the repository root:
 
-After pushing to GitHub, import the repository in Vercel and set the project root to `client`. Create the Render resources from the root `render.yaml` blueprint. Vercel needs the server-side environment variable `BACKEND_ORIGIN` set to the actual Render service origin (for example, the service URL Render assigns, without a path). Render needs `CLIENT_ORIGIN` set to the exact Vercel deployment origin. Deploy the Render service with a temporary valid HTTPS origin if its initial Blueprint prompt happens before the Vercel URL exists, then replace it with the actual Vercel origin and redeploy.
+- Vite builds the React frontend from `client/` into `client/dist/`.
+- `api/index.js` and `api/[...path].js` export the same Express application as Vercel Node.js Functions for `/api` and nested `/api/*` routes. They use the existing route handlers and calculation functions; they do not proxy to another server.
+- PostgreSQL stores account records and hashed, revocable session tokens. Vercel's function filesystem is not used for persistent data. Create a managed PostgreSQL database (for example, through a Vercel Marketplace PostgreSQL integration) and configure `DATABASE_URL`.
+- Saved business plans remain browser-local in localStorage, namespaced and validated by authenticated user ID. They persist across deployments in that browser but are not stored in PostgreSQL, shared across devices, or recoverable if browser storage is cleared.
 
-Before migrating existing local accounts, configure the Render database's **external** connection URL and TLS for a one-time local migration. In PowerShell, from `server`, set `$env:DATABASE_URL` to the external URL and `$env:DATABASE_SSL="true"`, then run `npm run migrate:users`. The script copies the ignored local `data/users.json` accounts in one transaction and does not print account details; it leaves the local file untouched. Existing accounts without a phone keep a null phone value. Never commit the user file or database URL.
+### Connect GitHub and configure Vercel
 
-Environment variable names and placeholders are in the root `.env.example` and `client/.env.example`. `BACKEND_ORIGIN` is server-side only; do not rename it to a `VITE_` variable. Render requires `DATABASE_URL`, `NODE_ENV=production`, and the exact `CLIENT_ORIGIN`; `DATABASE_SSL=true` is only needed for a TLS-required external database connection. Vercel and Render account authorization, creation of the paid database/service, environment variable entry, and final deploy approval require the project owner's account access.
+1. In Vercel, choose **Add New → Project**, import `rk446-glitch/startup-plannar`, and set the **Root Directory** to `.` (the repository root).
+2. Use the repository's `vercel.json` settings: install command `npm ci --prefix server && npm ci --prefix client`, build command `npm run build --prefix client`, and output directory `client/dist`. Use the **Other** framework preset if Vercel does not detect one automatically.
+3. Add a managed PostgreSQL integration/database and add its connection URL to the Vercel project's **Environment Variables** as `DATABASE_URL` for Production (and Preview only if each preview has an intentionally configured database).
+4. Set `DATABASE_SSL=true` only if the provider's connection requires TLS and its connection string does not already configure it. `CLIENT_ORIGIN` is optional for the default same-origin deployment; the API validates browser mutations against the HTTPS request host. If set, use the exact app origin, such as `https://your-project.vercel.app`.
+5. Deploy. The first API request initializes the existing `users` and `sessions` schema idempotently. Check `/api/health`; it reports an unavailable database as HTTP 503 rather than claiming the service is ready.
+
+Vercel supplies `VERCEL=1` at runtime. Do not set a separate backend URL or a `VITE_*` production API URL. Frontend requests use relative `/api/...` paths, so the website and API share the same domain and HttpOnly session cookie. Vercel's `NODE_ENV` production setting enables secure cookies.
+
+### Environment variables
+
+Set these in **Vercel → Project → Settings → Environment Variables**:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Managed PostgreSQL connection string; server-side only. |
+| `DATABASE_SSL` | Provider-dependent | Set to `true` only when TLS is required but not configured by the URL. |
+| `CLIENT_ORIGIN` | No | Optional extra allowed browser origin; same-origin Vercel traffic is checked against the request host. |
+
+`VERCEL` and `NODE_ENV` are provided by the platform. `AUTH_USERS_FILE` is only for local migration and must not point to a file on Vercel. Do not add database credentials to source control or frontend-prefixed environment variables.
+
+### Migrate existing local accounts
+
+If the ignored `server/data/users.json` contains accounts to preserve, migrate them once after creating the database. In PowerShell, from `server`, supply the database connection string securely in the current terminal and run:
+
+```powershell
+$env:DATABASE_URL = "postgresql://USER:PASSWORD@HOST:5432/DATABASE"
+$env:DATABASE_SSL = "true" # Only if the database requires TLS.
+npm run migrate:users
+```
+
+The script initializes the schema, imports accounts in a transaction without printing account details, leaves the source file untouched, and skips matching user IDs. Do not commit the connection string or local user file. The database connection and account migration must be verified by the project owner after supplying valid provider credentials.
+
+### Troubleshooting
+
+- **`Production database is not configured` / HTTP 503:** add `DATABASE_URL` to the Vercel environment for the deployment and redeploy.
+- **`Production database is unavailable` / health check HTTP 503:** verify the provider URL, database network access, and whether `DATABASE_SSL=true` is required.
+- **API routes return 404:** confirm the project root is the repository root and that both files in `api/` are included in the deployment.
+- **Registration/login fails after deployment:** first confirm `/api/health` is ready; then inspect Vercel Function logs for database connectivity errors. Existing local accounts are not present in the new database until migrated.
+- **Browser reports a blocked origin:** use the same deployed origin for the website and API, and remove stale cross-origin API URLs. If a separately hosted frontend is intentionally used, set `CLIENT_ORIGIN` to its exact HTTPS origin.
+- **Build cannot find a package:** keep the repository-root install command from `vercel.json`; it installs the backend and frontend lockfiles without adding a root dependency manifest.
 
 ## Install dependencies
 
@@ -150,13 +190,6 @@ From the `server` folder, run:
 npm test
 ```
 
-The Vercel API proxy has dependency-free Node tests in the client:
-
-```powershell
-cd client
-npm run test:proxy
-```
-
 ## Run the frontend
 
 In a second terminal, from the project folder:
@@ -166,7 +199,7 @@ cd client
 npm run dev
 ```
 
-Open the local URL printed by Vite. Requests from the frontend to `/api` are forwarded to `http://localhost:5000` during development, so start the backend in its own terminal as well.
+Open the local URL printed by Vite. During local development, requests to `/api` are forwarded to `http://localhost:5000`, so start the backend in its own terminal as well.
 
 ## Build the frontend
 

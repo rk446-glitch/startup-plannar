@@ -1,24 +1,38 @@
 const express = require("express");
 const cors = require("cors");
 const { requireAuth } = require("./auth/session");
-const { getPool, isDatabaseConfigured } = require("./db");
+const { getPool, initializeDatabase, isDatabaseConfigured } = require("./db");
 const authRoutes = require("./routes/auth");
 const calculationRoutes = require("./routes/calculations");
 
 const app = express();
+let vercelDatabaseReady;
 
 function allowedOrigins() {
   return new Set(
-    (process.env.CLIENT_ORIGIN || (process.env.NODE_ENV === "production" ? "" : "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5177,http://127.0.0.1:5177"))
+    (
+      process.env.CLIENT_ORIGIN ||
+      (process.env.NODE_ENV === "production" || process.env.VERCEL === "1"
+        ? ""
+        : "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5177,http://127.0.0.1:5177")
+    )
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
   );
 }
 
-function isAllowedOrigin(origin) {
+function isAllowedOrigin(origin, request) {
   if (allowedOrigins().has(origin)) return true;
-  if (process.env.NODE_ENV === "production") return false;
+  if (process.env.VERCEL === "1" && request) {
+    try {
+      const parsedOrigin = new URL(origin);
+      return parsedOrigin.protocol === "https:" && parsedOrigin.host === request.get("host");
+    } catch {
+      return false;
+    }
+  }
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") return false;
   try {
     const parsedOrigin = new URL(origin);
     return (
@@ -43,13 +57,38 @@ function validateRequestOrigin(request, response, next) {
     return;
   }
   const origin = request.get("origin");
-  if ((!origin && process.env.NODE_ENV === "production") || (origin && !isAllowedOrigin(origin))) {
+  const production = process.env.NODE_ENV === "production" || process.env.VERCEL === "1";
+  if ((!origin && production) || (origin && !isAllowedOrigin(origin, request))) {
     response.status(403).json({ success: false, error: "Request origin is not allowed." });
     return;
   }
   next();
 }
 
+async function initializeVercelDatabase(request, response, next) {
+  if (process.env.VERCEL !== "1") {
+    next();
+    return;
+  }
+  if (!isDatabaseConfigured()) {
+    response.status(503).json({ success: false, error: "Production database is not configured." });
+    return;
+  }
+  try {
+    if (!vercelDatabaseReady) {
+      vercelDatabaseReady = initializeDatabase().catch((error) => {
+        vercelDatabaseReady = undefined;
+        throw error;
+      });
+    }
+    await vercelDatabaseReady;
+    next();
+  } catch {
+    response.status(503).json({ success: false, error: "Production database is unavailable." });
+  }
+}
+
+app.use("/api", initializeVercelDatabase);
 app.use(cors(corsOptions));
 app.use("/api/auth", validateRequestOrigin);
 app.use("/api/calculate", validateRequestOrigin);

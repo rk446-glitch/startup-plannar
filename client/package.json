@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test:proxy": "node --test api/proxy.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
